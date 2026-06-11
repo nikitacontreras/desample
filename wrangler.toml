@@ -1,5 +1,2 @@
 name = "desample"
-
-[pages]
-build_command = "cd demo && npm ci && npm run build"
-build_output_dir = "demo/dist"
+pages_build_output_dir = "demo/dist"
