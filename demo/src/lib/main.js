@@ -1,6 +1,6 @@
 import { state, $, audioPlayer } from './state.js';
 import { setupDropZone } from './dom.js';
-import { handleAudio, handleStems, handleJson, setStemMute, togglePlay, sync, seekTo, startPlaybackAnim, updatePlayButtons, autoScrollWaveform, syncRatio } from './player.js';
+import { handleAudio, handleStems, handleJson, setStemMute, togglePlay, sync, seekTo, startPlaybackAnim, updatePlayButtons, autoScrollWaveform, stopStemsPlayback, syncRatio } from './player.js';
 import { renderPadGrid, updateActivePad, renderSlicePalettePads, renderRegionPads } from './pads.js';
 import { renderAllWaveforms } from './waveform.js';
 import { KEY_TO_NOTE } from './utils/constants.js';
@@ -75,22 +75,21 @@ $('stem-icons').addEventListener('click', (e) => {
 });
 
 // ── Keyboard triggers ──
-let triggerCtx = null;
+const activeTriggerNotes = new Set();
 const triggerSources = {};
 
-function getTriggerRegion(note) {
+function getNoteStart(note) {
   const regionIdx = note - 60;
   if (regionIdx < 0) return null;
   if (state.pads) {
     if (regionIdx >= state.pads.length) return null;
     const p = state.pads[regionIdx];
     if (!p?.slice) return null;
-    return { start: p.slice.StartPosition, end: p.slice.EndPosition };
+    return p.slice.StartPosition;
   }
   if (state.regions.length > 0) {
     if (regionIdx >= state.regions.length) return null;
-    const [start, end] = state.regions[regionIdx];
-    return { start, end };
+    return state.regions[regionIdx][0];
   }
   return null;
 }
@@ -116,31 +115,59 @@ function setActivePadForNote(note) {
   }
 }
 
+function stopTriggerNote(note) {
+  const sources = triggerSources[note];
+  if (!sources) return;
+  const arr = Array.isArray(sources) ? sources : [sources];
+  arr.forEach(s => { try { s.stop(); } catch (_) {} });
+  delete triggerSources[note];
+}
+
+function stopAllTriggers() {
+  for (const note of Object.keys(triggerSources)) stopTriggerNote(parseInt(note));
+}
+
+function startStemsCursor(startTime) {
+  state.stemsCurrentTime = startTime;
+  state.stemsStartTime = state.stemsCtx.currentTime - startTime;
+  state.stemsPlaying = true;
+  if (state.waveform) state.waveform.isPlaying = true;
+  function tick() {
+    if (state.stemsPlaying && state.stemsCtx) {
+      state.stemsCurrentTime = state.stemsCtx.currentTime - state.stemsStartTime;
+      if (state.waveform && state.stemsCurrentTime >= state.waveform.duration) {
+        state.stemsCurrentTime = state.waveform.duration;
+      }
+      updateActivePad();
+    }
+    state.stemsAnimId = requestAnimationFrame(tick);
+  }
+  if (state.stemsAnimId) cancelAnimationFrame(state.stemsAnimId);
+  state.stemsAnimId = requestAnimationFrame(tick);
+}
+
+function stopStemsCursor() {
+  state.stemsPlaying = false;
+  if (state.waveform) state.waveform.isPlaying = false;
+  if (state.stemsAnimId) { cancelAnimationFrame(state.stemsAnimId); state.stemsAnimId = null; }
+}
+
 document.addEventListener('keydown', async (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   const note = KEY_TO_NOTE[e.key.toLowerCase()];
   if (note === undefined) return;
-  if (triggerSources[note]) return;
+  if (activeTriggerNotes.has(note)) return;
   e.preventDefault();
-  const region = getTriggerRegion(note);
-  if (!region) return;
-  const { start, end } = region;
-  const duration = end - start;
-  if (duration <= 0) return;
-
+  activeTriggerNotes.add(note);
+  const start = getNoteStart(note);
+  if (start === null || start === undefined) return;
+  seekTo(start);
   setActivePadForNote(note);
 
-  if (!state.stemsMode && state.audioBuffer) {
-    if (!triggerCtx || triggerCtx.state === 'closed') triggerCtx = new AudioContext();
-    if (triggerCtx.state === 'suspended') await triggerCtx.resume();
-    const source = triggerCtx.createBufferSource();
-    source.buffer = state.audioBuffer;
-    source.connect(triggerCtx.destination);
-    triggerSources[note] = source;
-    source.onended = () => { if (triggerSources[note] === source) delete triggerSources[note]; };
-    source.start(0, start, duration);
-  } else if (state.stemsMode && state.stemsCtx) {
+  if (state.stemsMode && state.stemsCtx) {
     if (state.stemsCtx.state === 'suspended') await state.stemsCtx.resume();
+    startStemsCursor(start);
+    updatePlayButtons();
     const sources = [];
     state.stemsBuffers.forEach((buffer, i) => {
       if (state.stemsMuted[i]) return;
@@ -149,21 +176,28 @@ document.addEventListener('keydown', async (e) => {
       s.playbackRate.value = syncRatio;
       s.connect(state.stemsGains[i]);
       sources.push(s);
-      s.start(0, start, duration);
+      s.start(0, start);
     });
     triggerSources[note] = sources;
+  } else if (!state.stemsMode) {
+    if (audioPlayer.paused) audioPlayer.play().catch(() => {});
   }
 });
 
 document.addEventListener('keyup', (e) => {
   const note = KEY_TO_NOTE[e.key.toLowerCase()];
   if (note === undefined) return;
-  const sources = triggerSources[note];
-  if (!sources) return;
+  if (!activeTriggerNotes.has(note)) return;
   e.preventDefault();
-  const arr = Array.isArray(sources) ? sources : [sources];
-  arr.forEach(s => { try { s.stop(); } catch (e) {} });
-  delete triggerSources[note];
+  activeTriggerNotes.delete(note);
+  stopTriggerNote(note);
+
+  if (state.stemsMode && activeTriggerNotes.size === 0) {
+    stopStemsCursor();
+    updatePlayButtons();
+  } else if (!state.stemsMode && activeTriggerNotes.size === 0) {
+    audioPlayer.pause();
+  }
 });
 
 // ── Overview seek drag ──

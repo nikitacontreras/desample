@@ -19,6 +19,7 @@ export const state = {
   stemsPlaying: false,
   stemsStartTime: 0,
   stemsAnimId: null,
+  triggerCtx: null,
 };
 
 export function getCurrentTime() {
