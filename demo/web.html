@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>desample — Serato Sample Toolkit</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #0d0d0d; color: #e0e0e0; min-height: 100vh;
+}
+header {
+  padding: 24px 32px 0; max-width: 960px; margin: 0 auto;
+}
+header h1 { font-size: 20px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
+header p { font-size: 13px; color: #666; margin-top: 4px; }
+.container { max-width: 960px; margin: 0 auto; padding: 24px 32px 48px; }
+
+/* Drop zones */
+.drop-row { display: flex; gap: 12px; margin-bottom: 28px; }
+.drop-zone {
+  flex: 1; border: 1.5px dashed #333; border-radius: 10px;
+  padding: 20px; text-align: center; cursor: pointer;
+  transition: border-color .2s, background .2s;
+  background: #121212; position: relative;
+}
+.drop-zone:hover { border-color: #555; }
+.drop-zone.dragover { border-color: #6c9; background: #0f1f15; }
+.drop-zone.has-file { border-color: #6c9; border-style: solid; }
+.drop-zone-label {
+  font-size: 12px; font-weight: 500; color: #888; letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.drop-zone-icon { font-size: 28px; margin-bottom: 6px; color: #444; }
+.drop-zone-text { font-size: 13px; color: #555; margin-top: 6px; }
+.drop-zone .file-info { font-size: 12px; color: #6c9; margin-top: 8px; display: none; }
+.drop-zone.has-file .file-info { display: block; }
+.drop-zone.has-file .drop-zone-icon { color: #6c9; }
+.drop-zone.has-file .drop-zone-text { color: #999; }
+.drop-zone input[type=file] { display: none; }
+
+/* Sections */
+.section { margin-bottom: 24px; }
+.section-title {
+  font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase;
+  letter-spacing: 0.8px; margin-bottom: 10px;
+}
+.section-card {
+  background: #141414; border: 1px solid #222; border-radius: 8px; padding: 16px;
+}
+.empty-state { color: #444; font-size: 13px; font-style: italic; }
+
+/* Stats grid */
+.stat-grid { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.stat-item { }
+.stat-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
+.stat-value { font-size: 15px; color: #e0e0e0; font-weight: 500; margin-top: 1px; }
+
+/* Stem list */
+.stem-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid #1a1a1a;
+}
+.stem-row:last-child { border-bottom: none; }
+.stem-badge {
+  width: 6px; height: 48px; border-radius: 3px; flex-shrink: 0;
+}
+.stem-name { font-size: 14px; font-weight: 500; min-width: 70px; }
+.stem-index { font-size: 11px; color: #555; }
+.stem-bar-wrap { flex: 1; height: 6px; background: #1e1e1e; border-radius: 3px; overflow: hidden; }
+.stem-bar { height: 100%; border-radius: 3px; transition: width .4s; }
+.stem-size { font-size: 12px; color: #888; min-width: 60px; text-align: right; }
+.stem-dl {
+  background: #1c1c1c; border: 1px solid #333; color: #ccc;
+  padding: 5px 12px; border-radius: 5px; font-size: 12px; cursor: pointer;
+  transition: all .15s; text-decoration: none;
+}
+.stem-dl:hover { background: #2a2a2a; border-color: #555; color: #fff; }
+
+/* Key-value list */
+.kv-list { display: grid; grid-template-columns: 140px 1fr; gap: 3px 0; }
+.kv-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.3px; padding: 3px 8px 3px 0; }
+.kv-value { font-size: 13px; color: #ccc; padding: 3px 0; word-break: break-all; }
+.kv-value.code { font-family: 'SF Mono', monospace; font-size: 12px; }
+
+/* Pad grid */
+.pad-grid-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
+.bank-group { flex: 1 1 160px; min-width: 140px; }
+.bank-label {
+  font-size: 10px; font-weight: 600; color: #555; text-transform: uppercase;
+  margin-bottom: 4px; letter-spacing: 0.5px;
+}
+.pad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.pad-cell {
+  aspect-ratio: 1; border-radius: 3px; background: #1c1c1c;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: #333; cursor: default; transition: all .15s;
+  position: relative;
+}
+.pad-cell.has-slice { background: #2a5a3a; color: #b0e0c0; }
+.pad-cell .pad-idx { position: absolute; top: 1px; left: 3px; font-size: 7px; color: rgba(255,255,255,0.15); }
+.pad-cell .pad-num { font-size: 9px; font-weight: 600; }
+.pad-cell:hover { filter: brightness(1.3); }
+.pad-cell.has-slice:hover::after {
+  content: attr(data-tip);
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  background: #222; color: #ccc; font-size: 10px; padding: 3px 7px;
+  border-radius: 4px; white-space: nowrap; z-index: 10;
+  pointer-events: none;
+}
+
+/* Audio preview */
+.audio-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.audio-row audio { height: 32px; flex: 1; }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .drop-row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>desample</h1>
+  <p>Serato Sample Toolkit — carga un archivo .serato-stems y/o el JSON del proyecto</p>
+</header>
+
+<div class="container">
+
+  <!-- Drop Zones -->
+  <div class="drop-row">
+    <div class="drop-zone" id="stemsZone">
+      <div class="drop-zone-icon">&#9835;</div>
+      <div class="drop-zone-label">.serato-stems</div>
+      <div class="drop-zone-text">Suelta el archivo o haz clic</div>
+      <div class="file-info" id="stemsFileInfo"></div>
+      <input type="file" id="stemsFileInput" accept=".serato-stems,.stems">
+    </div>
+    <div class="drop-zone" id="jsonZone">
+      <div class="drop-zone-icon">{ }</div>
+      <div class="drop-zone-label">serato.json <span style="color:#555;font-weight:400">(opcional)</span></div>
+      <div class="drop-zone-text">Proyecto extraído de Event 213</div>
+      <div class="file-info" id="jsonFileInfo"></div>
+      <input type="file" id="jsonFileInput" accept=".json">
+    </div>
+  </div>
+
+  <!-- Stems Section -->
+  <div class="section" id="stemsSection" style="display:none">
+    <div class="section-title">Stems</div>
+    <div class="section-card">
+      <div class="stat-grid" id="stemsStats"></div>
+      <div style="margin-top:14px" id="stemsList"></div>
+      <div id="stemsAudio" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Project Section -->
+  <div class="section" id="projectSection" style="display:none">
+    <div class="section-title">Serato Project</div>
+    <div class="section-card">
+      <div class="kv-list" id="projectInfo"></div>
+    </div>
+  </div>
+
+  <!-- Source Song Section -->
+  <div class="section" id="songSection" style="display:none">
+    <div class="section-title">Source Song</div>
+    <div class="section-card">
+      <div class="kv-list" id="songInfo"></div>
+    </div>
+  </div>
+
+  <!-- Slice Pads Section -->
+  <div class="section" id="padsSection" style="display:none">
+    <div class="section-title">Slice Pads</div>
+    <div class="section-card">
+      <p style="font-size:12px;color:#555;margin-bottom:12px">
+        Los pads se organizan en 8 bancos (mcm → tcm) de 16 pads cada uno (128 total).
+        Cada pad corresponde a una nota MIDI.
+        <span id="assignedCount" style="color:#6c9"></span>
+      </p>
+      <div class="pad-grid-wrap" id="padGrids"></div>
+    </div>
+  </div>
+
+  <!-- Tempo Map section -->
+  <div class="section" id="tempoSection" style="display:none">
+    <div class="section-title">Tempo Map</div>
+    <div class="section-card">
+      <div id="tempoInfo" style="font-size:12px;color:#888"></div>
+    </div>
+  </div>
+
+  <!-- Selected Stems -->
+  <div class="section" id="selectedStemsSection" style="display:none">
+    <div class="section-title">Selected Stems</div>
+    <div class="section-card" id="selectedStemsInfo"></div>
+  </div>
+
+</div>
+
+<script>
+// ─── Parsing: .serato-stems ────────────────────────────────────────────────
+const STEM_MAPPING = { 1: 'drums', 2: 'bass', 3: 'other', 4: 'vocals' };
+const BANK_NAMES = ['mcm', 'ncm', 'ocm', 'pcm', 'qcm', 'rcm', 'scm', 'tcm'];
+
+function readUint32BE(data, offset) {
+  return ((data[offset] << 24) | (data[offset+1] << 16) | (data[offset+2] << 8) | data[offset+3]) >>> 0;
+}
+function readUint16BE(data, offset) {
+  return ((data[offset] << 8) | data[offset+1]) >>> 0;
+}
+function decodeTag(data, offset) {
+  if (offset + 4 > data.length) return '';
+  return new TextDecoder().decode(data.slice(offset, offset + 4)).replace(/\0/g, '');
+}
+
+function parseStemsFile(bytes) {
+  const fileData = new Uint8Array(bytes);
+  if (fileData.length < 8) throw new Error('File too small');
+  const magic = decodeTag(fileData, 0);
+  if (magic !== 'srts') throw new Error(`Invalid magic: "${magic}"`);
+
+  let offset = 4, stemCount = 0, stems = [];
+  let version = '', totalStems = 0, sampleRate = 0, totalSamples = 0;
+
+  while (offset + 8 <= fileData.length) {
+    const tag = decodeTag(fileData, offset);
+    const length = readUint32BE(fileData, offset + 4);
+    offset += 8;
+    if (offset + length > fileData.length) break;
+
+    if (tag === 'head') {
+      if (length >= 16) {
+        const vMajor = readUint16BE(fileData, offset);
+        const vMinor = readUint16BE(fileData, offset + 2);
+        version = `${vMajor}.${vMinor}`;
+        totalStems = readUint32BE(fileData, offset + 4);
+        totalSamples = readUint32BE(fileData, offset + 8);
+        sampleRate = readUint32BE(fileData, offset + 12);
+      }
+      offset += length;
+    } else if (tag === 'stem') {
+      stemCount++;
+      const raw = fileData.slice(offset, offset + length);
+      const assignment = STEM_MAPPING[stemCount] || `unknown_${stemCount}`;
+      const audioStart = raw.length >= 4 ? 4 : 0;
+      const audioLen = raw.length - audioStart;
+      const clean = new Uint8Array(audioLen);
+      for (let i = 0; i < audioLen; i++) clean[i] = raw[audioStart + i] ^ 0x26;
+      stems.push({ index: stemCount, assignment, size: audioLen, data: clean });
+      offset += length;
+    } else {
+      offset += length > 0 ? length : 1;
+    }
+  }
+
+  const durationSeconds = sampleRate > 0 ? Math.round((totalSamples / sampleRate) * 1000) / 1000 : 0;
+  return { version, totalStems, sampleRate, totalSamples, durationSeconds, stems };
+}
+
+// ─── Parsing: Serato project JSON from buffer ─────────────────────────────
+const PJPREFIX = new Uint8Array([0x23, 0x50]); // #P
+const BRACE_OPEN = 0x7b, BRACE_CLOSE = 0x7d, QUOTE = 0x22, BACKSLASH = 0x5c;
+
+function findBytes(data, needle, startOffset = 0) {
+  for (let i = startOffset; i <= data.length - needle.length; i++) {
+    let match = true;
+    for (let j = 0; j < needle.length; j++) { if (data[i+j] !== needle[j]) { match = false; break; } }
+    if (match) return i;
+  }
+  return -1;
+}
+
+function extractProjectJson(data) {
+  const prefixIdx = findBytes(data, PJPREFIX);
+  if (prefixIdx < 0) return null;
+  const braceStart = prefixIdx + 2;
+  if (braceStart >= data.length || data[braceStart] !== BRACE_OPEN) return null;
+  let depth = 0, inStr = false, escaped = false, end = -1;
+  for (let i = braceStart; i < data.length; i++) {
+    const b = data[i];
+    if (escaped) { escaped = false; continue; }
+    if (b === BACKSLASH) { escaped = true; continue; }
+    if (b === QUOTE) { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (b === BRACE_OPEN) depth++;
+    else if (b === BRACE_CLOSE) { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  if (end < 0) return null;
+  const raw = data.slice(braceStart, end);
+  const jsonStr = new TextDecoder().decode(raw);
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed === 'object' && 'project' in parsed) return parsed.project;
+    return parsed;
+  } catch { return null; }
+}
+
+// ─── UI ────────────────────────────────────────────────────────────────────
+const stemsZone = document.getElementById('stemsZone');
+const stemsInput = document.getElementById('stemsFileInput');
+const jsonZone = document.getElementById('jsonZone');
+const jsonInput = document.getElementById('jsonFileInput');
+
+let stemsData = null;
+let projectData = null;
+
+function setupDropZone(zone, input, onFile) {
+  zone.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    if (input.files[0]) onFile(input.files[0]);
+  });
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+}
+
+setupDropZone(stemsZone, stemsInput, handleStemsFile);
+setupDropZone(jsonZone, jsonInput, handleJsonFile);
+
+function formatBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+function handleStemsFile(file) {
+  stemsZone.classList.add('has-file');
+  document.getElementById('stemsFileInfo').textContent = `${file.name} (${formatBytes(file.size)})`;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      stemsData = parseStemsFile(reader.result);
+      renderStems();
+    } catch (err) {
+      stemsData = null;
+      document.getElementById('stemsSection').style.display = 'none';
+      alert('Error parsing .serato-stems: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function handleJsonFile(file) {
+  jsonZone.classList.add('has-file');
+  document.getElementById('jsonFileInfo').textContent = `${file.name} (${formatBytes(file.size)})`;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      // Try parsing as raw JSON first (serato_sample.json with nested event)
+      let obj = JSON.parse(reader.result);
+
+      // Check if it's serato_sample.json format: {"Unknown Event (213)": {...byte dict}}
+      const keys = Object.keys(obj);
+      if (keys.length === 1 && /^Unknown\s+Event/.test(keys[0])) {
+        const blob = obj[keys[0]];
+        // blob is dict of "0": 123, "1": 45, etc.
+        const bytes = new Uint8Array(Object.keys(blob).map(k => blob[k]));
+        projectData = extractProjectJson(bytes);
+      } else if (keys.length === 1 && keys[0] === 'project') {
+        // extracted_serato.json format: {"project": {...}}
+        projectData = obj.project;
+      } else if (obj && typeof obj === 'object' && 'Version' in obj) {
+        // Direct SeratoProject
+        projectData = obj;
+      } else {
+        // Try treating the JSON itself as a byte-like array or try raw extraction
+        // Try direct parse as SeratoProject
+        projectData = obj;
+      }
+      renderProject();
+    } catch (err) {
+      projectData = null;
+      document.getElementById('projectSection').style.display = 'none';
+      alert('Error parsing JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ─── Render ────────────────────────────────────────────────────────────────
+function renderStems() {
+  if (!stemsData) return;
+  const d = stemsData;
+  document.getElementById('stemsSection').style.display = 'block';
+
+  // Stats
+  document.getElementById('stemsStats').innerHTML = `
+    <div class="stat-item"><div class="stat-label">Version</div><div class="stat-value">${d.version}</div></div>
+    <div class="stat-item"><div class="stat-label">Stems</div><div class="stat-value">${d.totalStems}</div></div>
+    <div class="stat-item"><div class="stat-label">Sample Rate</div><div class="stat-value">${d.sampleRate} Hz</div></div>
+    <div class="stat-item"><div class="stat-label">Duration</div><div class="stat-value">${d.durationSeconds}s</div></div>
+    <div class="stat-item"><div class="stat-label">Samples</div><div class="stat-value">${d.totalSamples.toLocaleString()}</div></div>
+  `;
+
+  // Stem list
+  const maxSize = Math.max(...d.stems.map(s => s.size));
+  const stemColors = { drums: '#d44', bass: '#48d', other: '#da4', vocals: '#4d8' };
+  const listEl = document.getElementById('stemsList');
+  listEl.innerHTML = d.stems.map(s => {
+    const color = stemColors[s.assignment] || '#666';
+    const pct = (s.size / maxSize * 100).toFixed(0);
+    const dlUrl = URL.createObjectURL(new Blob([s.data.buffer], { type: 'audio/mpeg' }));
+    return `<div class="stem-row">
+      <div class="stem-badge" style="background:${color}"></div>
+      <div class="stem-name">${s.assignment}</div>
+      <div class="stem-index">#${s.index}</div>
+      <div class="stem-bar-wrap"><div class="stem-bar" style="width:${pct}%;background:${color}"></div></div>
+      <div class="stem-size">${formatBytes(s.size)}</div>
+      <a class="stem-dl" href="${dlUrl}" download="${s.assignment}.mp3" data-filename="${s.assignment}.mp3">&#8595; MP3</a>
+    </div>`;
+  }).join('');
+
+  // Audio previews
+  const audioEl = document.getElementById('stemsAudio');
+  audioEl.innerHTML = d.stems.map(s => {
+    const url = URL.createObjectURL(new Blob([s.data.buffer], { type: 'audio/mpeg' }));
+    return `<div class="audio-row">
+      <strong style="font-size:12px;min-width:70px;color:#999">${s.assignment}</strong>
+      <audio controls src="${url}"></audio>
+    </div>`;
+  }).join('');
+}
+
+function renderProject() {
+  if (!projectData) return;
+  const p = projectData;
+  document.getElementById('projectSection').style.display = 'block';
+
+  // Basic project info
+  document.getElementById('projectInfo').innerHTML = `
+    <div class="kv-label">Version</div><div class="kv-value">${p.Version ?? '?'}</div>
+    <div class="kv-label">Vaporwave</div><div class="kv-value">${p.VaporwaveWaveformsActive ? '✓' : '—'}</div>
+    <div class="kv-label">Velocity Sensitive</div><div class="kv-value">${p.VelocitySensitive ? '✓' : '—'}</div>
+    <div class="kv-label">Quantize</div><div class="kv-value">${p.Quantize ? '✓' : '—'}</div>
+  `;
+
+  // Source Song
+  if (p.sourceSong) {
+    const s = p.sourceSong;
+    document.getElementById('songSection').style.display = 'block';
+    document.getElementById('songInfo').innerHTML = `
+      <div class="kv-label">Name</div><div class="kv-value">${s.Name || '?'}</div>
+      <div class="kv-label">Artist</div><div class="kv-value">${s.Artist || '?'}</div>
+      <div class="kv-label">File</div><div class="kv-value code" style="font-size:11px">${s.File || '?'}</div>
+      <div class="kv-label">BPM</div><div class="kv-value">${s.BPM?.toFixed(1) ?? '?'}</div>
+      <div class="kv-label">Key</div><div class="kv-value">${s.Key ?? '?'} (offset: ${s.KeySemitoneOffset ?? 0} semitones)</div>
+      <div class="kv-label">Length</div><div class="kv-value">${s.Length?.toFixed(1) ?? '?'}s</div>
+      <div class="kv-label">Playhead</div><div class="kv-value">${s.PlayheadPosition?.toFixed(1) ?? '?'}s</div>
+      <div class="kv-label">Sync to Host</div><div class="kv-value">${s.SyncToHost ? '✓' : '—'}</div>
+      <div class="kv-label">BPM Multiplier</div><div class="kv-value">${s.BpmMultiplier ?? 1}</div>
+      <div class="kv-label">Analysis</div><div class="kv-value">${s.Analysis ?? '?'}</div>
+      <div class="kv-label">Downbeat</div><div class="kv-value">#${s.DownbeatIndex ?? '?'}</div>
+    `;
+
+    // Tempo Map
+    if (s.TempoMap) {
+      document.getElementById('tempoSection').style.display = 'block';
+      try {
+        const decoded = atob(s.TempoMap);
+        let tempoText = '';
+        if (decoded.length <= 200) {
+          tempoText = decoded.slice(0, 200);
+        } else {
+          tempoText = decoded.slice(0, 200) + '... <em style="color:#555">(' + decoded.length + ' bytes total)</em>';
+        }
+        document.getElementById('tempoInfo').innerHTML = `
+          <div style="margin-bottom:6px">
+            <span style="color:#666">Base64:</span> ${s.TempoMap.length} chars
+            &middot; <span style="color:#666">Decoded:</span> ${decoded.length} bytes
+          </div>
+          <div style="font-family:monospace;font-size:11px;color:#777;word-break:break-all;line-height:1.6">${tempoText}</div>
+        `;
+      } catch {
+        document.getElementById('tempoInfo').textContent = 'Base64: ' + s.TempoMap.length + ' chars (decode error)';
+      }
+    }
+
+    // Sample Regions
+    if (s.SampleRegions) {
+      const regions = s.SampleRegions.split(',').filter(Boolean);
+      const regionCount = regions.length;
+      document.getElementById('songInfo').innerHTML += `
+        <div class="kv-label">Regions</div><div class="kv-value">${regionCount} regiones</div>
+      `;
+    }
+  }
+
+  // Slice Pads
+  if (p.slicePalette) {
+    const sp = p.slicePalette;
+    document.getElementById('padsSection').style.display = 'block';
+    const pads = sp.slicePad || [];
+    const assigned = pads.filter(pad => pad.slice);
+    document.getElementById('assignedCount').textContent = `${assigned.length}/${pads.length} pads asignados.`;
+
+    // Group into banks of 16
+    let gridHtml = '';
+    for (let b = 0; b < BANK_NAMES.length; b++) {
+      const bankName = BANK_NAMES[b];
+      const startIdx = b * 16;
+      const bankPads = pads.slice(startIdx, startIdx + 16);
+      let cells = '';
+      for (let i = 0; i < 16; i++) {
+        const pad = bankPads[i];
+        const sl = pad?.slice;
+        const hasClass = sl ? 'has-slice' : '';
+        const tip = sl ? `${sl.Name || 'slice'} (${sl.StartPosition.toFixed(2)}s–${sl.EndPosition.toFixed(2)}s)` : '';
+        cells += `<div class="pad-cell ${hasClass}" data-tip="${tip.replace(/"/g,'&quot;')}">
+          <span class="pad-idx">${i}</span>
+          <span class="pad-num">${sl ? (sl.Name ? sl.Name.slice(0,6) : 'S'+i) : ''}</span>
+        </div>`;
+      }
+      gridHtml += `<div class="bank-group">
+        <div class="bank-label">${bankName}</div>
+        <div class="pad-grid">${cells}</div>
+      </div>`;
+    }
+    document.getElementById('padGrids').innerHTML = gridHtml;
+
+    // Pad detail list
+    const padsWithSlice = pads.map((p, i) => ({ ...p, index: i })).filter(p => p.slice);
+    if (padsWithSlice.length > 0) {
+      let detailHtml = '<div style="margin-top:16px;border-top:1px solid #1a1a1a;padding-top:12px">';
+      detailHtml += '<div style="font-size:11px;color:#555;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Pad Details</div>';
+      detailHtml += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+      detailHtml += '<thead><tr style="color:#555;text-transform:uppercase;font-size:10px;letter-spacing:0.3px">';
+      detailHtml += '<th style="text-align:left;padding:4px 6px">Pad</th>';
+      detailHtml += '<th style="text-align:left;padding:4px 6px">Name</th>';
+      detailHtml += '<th style="text-align:right;padding:4px 6px">Start</th>';
+      detailHtml += '<th style="text-align:right;padding:4px 6px">End</th>';
+      detailHtml += '<th style="text-align:right;padding:4px 6px">Key</th>';
+      detailHtml += '<th style="text-align:right;padding:4px 6px">Speed</th>';
+      detailHtml += '<th style="text-align:right;padding:4px 6px">Level</th>';
+      detailHtml += '<th style="text-align:right;padding:4px 6px">Filter</th>';
+      detailHtml += '<th style="text-align:center;padding:4px 6px">Rev</th>';
+      detailHtml += '</tr></thead><tbody>';
+      for (const pad of padsWithSlice) {
+        const s = pad.slice;
+        const bankIdx = Math.floor(pad.index / 16);
+        const padInBank = pad.index % 16;
+        const bankName = BANK_NAMES[bankIdx] || '?';
+        detailHtml += `<tr style="border-top:1px solid #1c1c1c">`;
+        detailHtml += `<td style="padding:4px 6px;color:#888;font-family:monospace">${bankName}${padInBank}</td>`;
+        detailHtml += `<td style="padding:4px 6px">${s.Name || '—'}</td>`;
+        detailHtml += `<td style="padding:4px 6px;text-align:right;font-family:monospace;color:#999">${s.StartPosition.toFixed(3)}</td>`;
+        detailHtml += `<td style="padding:4px 6px;text-align:right;font-family:monospace;color:#999">${s.EndPosition.toFixed(3)}</td>`;
+        detailHtml += `<td style="padding:4px 6px;text-align:right">${s.KeySemitoneOffset > 0 ? '+' : ''}${s.KeySemitoneOffset}</td>`;
+        detailHtml += `<td style="padding:4px 6px;text-align:right">${s.PlaybackSpeed.toFixed(3)}</td>`;
+        detailHtml += `<td style="padding:4px 6px;text-align:right;color:#ccc">${Math.round(s.Level * 100)}%</td>`;
+        detailHtml += `<td style="padding:4px 6px;text-align:right;color:#888">${Math.round(s.FilterFrequency)} Hz</td>`;
+        detailHtml += `<td style="padding:4px 6px;text-align:center">${s.Reverse ? '↶' : '—'}</td>`;
+        detailHtml += `</tr>`;
+      }
+      detailHtml += '</tbody></table></div>';
+      // Insert after the pad grid
+      document.getElementById('padGrids').insertAdjacentHTML('afterend', detailHtml);
+    }
+  }
+
+  // Selected Stems
+  if (p.SelectedStems && p.SelectedStems.length > 0) {
+    document.getElementById('selectedStemsSection').style.display = 'block';
+    document.getElementById('selectedStemsInfo').innerHTML = p.SelectedStems.map(s =>
+      `<span style="display:inline-block;background:#1e2e1e;color:#6c9;padding:2px 8px;border-radius:4px;font-size:12px;margin:2px">${s}</span>`
+    ).join(' ');
+  }
+}
+</script>
+</body>
+</html>

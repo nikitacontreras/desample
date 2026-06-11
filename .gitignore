@@ -1,0 +1,9 @@
+node_modules/
+dist/
+demo/dist/
+demo/.astro/
+extracted_stems/
+.env
+*.log
+.DS_Store
+.idea/
