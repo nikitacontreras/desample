@@ -343,3 +343,5 @@ export function renderStems() {
     </div>`;
   }).join('');
 }
+
+export { syncRatio };

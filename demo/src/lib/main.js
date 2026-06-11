@@ -1,8 +1,9 @@
 import { state, $, audioPlayer } from './state.js';
 import { setupDropZone } from './dom.js';
-import { handleAudio, handleStems, handleJson, setStemMute, togglePlay, sync, seekTo, startPlaybackAnim, updatePlayButtons, autoScrollWaveform } from './player.js';
-import { renderPadGrid, updateActivePad } from './pads.js';
+import { handleAudio, handleStems, handleJson, setStemMute, togglePlay, sync, seekTo, startPlaybackAnim, updatePlayButtons, autoScrollWaveform, syncRatio } from './player.js';
+import { renderPadGrid, updateActivePad, renderSlicePalettePads, renderRegionPads } from './pads.js';
 import { renderAllWaveforms } from './waveform.js';
+import { KEY_TO_NOTE } from './utils/constants.js';
 
 // ── Drop zones ──
 setupDropZone($('audio-zone'), $('audio-input'), handleAudio);
@@ -71,6 +72,98 @@ $('stem-icons').addEventListener('click', (e) => {
   if (!dot) return;
   const idx = parseInt(dot.dataset.idx);
   setStemMute(idx, !state.stemsMuted[idx]);
+});
+
+// ── Keyboard triggers ──
+let triggerCtx = null;
+const triggerSources = {};
+
+function getTriggerRegion(note) {
+  const regionIdx = note - 60;
+  if (regionIdx < 0) return null;
+  if (state.pads) {
+    if (regionIdx >= state.pads.length) return null;
+    const p = state.pads[regionIdx];
+    if (!p?.slice) return null;
+    return { start: p.slice.StartPosition, end: p.slice.EndPosition };
+  }
+  if (state.regions.length > 0) {
+    if (regionIdx >= state.regions.length) return null;
+    const [start, end] = state.regions[regionIdx];
+    return { start, end };
+  }
+  return null;
+}
+
+function setActivePadForNote(note) {
+  const regionIdx = note - 60;
+  if (state.pads) {
+    if (regionIdx >= state.pads.length) return;
+    if (!state.pads[regionIdx]?.slice) return;
+    const bank = Math.floor(regionIdx / 16);
+    if (bank !== state.currentBank) {
+      state.currentBank = bank;
+      renderPadGrid();
+    }
+    const bankIdx = regionIdx - bank * 16;
+    state.activePadIdx = bankIdx;
+    state.activePad = state.pads[regionIdx].slice;
+    renderSlicePalettePads();
+  } else if (state.regions.length > 0) {
+    if (regionIdx >= state.regions.length) return;
+    state.activeRegionIdx = regionIdx;
+    renderRegionPads();
+  }
+}
+
+document.addEventListener('keydown', async (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const note = KEY_TO_NOTE[e.key.toLowerCase()];
+  if (note === undefined) return;
+  if (triggerSources[note]) return;
+  e.preventDefault();
+  const region = getTriggerRegion(note);
+  if (!region) return;
+  const { start, end } = region;
+  const duration = end - start;
+  if (duration <= 0) return;
+
+  setActivePadForNote(note);
+
+  if (!state.stemsMode && state.audioBuffer) {
+    if (!triggerCtx || triggerCtx.state === 'closed') triggerCtx = new AudioContext();
+    if (triggerCtx.state === 'suspended') await triggerCtx.resume();
+    const source = triggerCtx.createBufferSource();
+    source.buffer = state.audioBuffer;
+    source.connect(triggerCtx.destination);
+    triggerSources[note] = source;
+    source.onended = () => { if (triggerSources[note] === source) delete triggerSources[note]; };
+    source.start(0, start, duration);
+  } else if (state.stemsMode && state.stemsCtx) {
+    if (state.stemsCtx.state === 'suspended') await state.stemsCtx.resume();
+    const sources = [];
+    state.stemsBuffers.forEach((buffer, i) => {
+      if (state.stemsMuted[i]) return;
+      const s = state.stemsCtx.createBufferSource();
+      s.buffer = buffer;
+      s.playbackRate.value = syncRatio;
+      s.connect(state.stemsGains[i]);
+      sources.push(s);
+      s.start(0, start, duration);
+    });
+    triggerSources[note] = sources;
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  const note = KEY_TO_NOTE[e.key.toLowerCase()];
+  if (note === undefined) return;
+  const sources = triggerSources[note];
+  if (!sources) return;
+  e.preventDefault();
+  const arr = Array.isArray(sources) ? sources : [sources];
+  arr.forEach(s => { try { s.stop(); } catch (e) {} });
+  delete triggerSources[note];
 });
 
 // ── Overview seek drag ──
