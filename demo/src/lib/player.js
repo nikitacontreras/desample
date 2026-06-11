@@ -15,7 +15,7 @@ export function handleAudio(file) {
   const info = $('audio-file-info');
   info.textContent = '✓'; info.classList.remove('hidden');
   $('audio-filename').textContent = file.name;
-  if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
+      if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
   state.audioFile = file;
   state.audioUrl = URL.createObjectURL(file);
   audioPlayer.src = state.audioUrl;
@@ -39,7 +39,9 @@ export function handleAudio(file) {
         isPlaying: false,
         animId: null,
       };
-      ctx.close();
+      if (state.triggerCtx) state.triggerCtx.close();
+      state.triggerCtx = ctx;
+      ctx.suspend();
       updateTrackInfo();
       renderAllWaveforms();
       $('waveform-empty').classList.add('hidden');

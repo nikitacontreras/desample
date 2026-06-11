@@ -1,9 +1,11 @@
 import { state, $, audioPlayer } from './state.js';
 import { setupDropZone } from './dom.js';
-import { handleAudio, handleStems, handleJson, setStemMute, togglePlay, sync, seekTo, startPlaybackAnim, updatePlayButtons, autoScrollWaveform, stopStemsPlayback, syncRatio } from './player.js';
+import { handleAudio, handleStems, handleJson, setStemMute, togglePlay, sync, seekTo, startPlaybackAnim, updatePlayButtons, autoScrollWaveform, syncRatio } from './player.js';
 import { renderPadGrid, updateActivePad, renderSlicePalettePads, renderRegionPads } from './pads.js';
 import { renderAllWaveforms } from './waveform.js';
 import { KEY_TO_NOTE } from './utils/constants.js';
+import { startFps } from './fps.js';
+startFps();
 
 // ── Drop zones ──
 setupDropZone($('audio-zone'), $('audio-input'), handleAudio);
@@ -78,18 +80,19 @@ $('stem-icons').addEventListener('click', (e) => {
 const activeTriggerNotes = new Set();
 const triggerSources = {};
 
-function getNoteStart(note) {
+function getNoteRegion(note) {
   const regionIdx = note - 60;
   if (regionIdx < 0) return null;
   if (state.pads) {
     if (regionIdx >= state.pads.length) return null;
     const p = state.pads[regionIdx];
     if (!p?.slice) return null;
-    return p.slice.StartPosition;
+    return { start: p.slice.StartPosition, end: p.slice.EndPosition };
   }
   if (state.regions.length > 0) {
     if (regionIdx >= state.regions.length) return null;
-    return state.regions[regionIdx][0];
+    const [start, end] = state.regions[regionIdx];
+    return { start, end };
   }
   return null;
 }
@@ -123,33 +126,40 @@ function stopTriggerNote(note) {
   delete triggerSources[note];
 }
 
-function stopAllTriggers() {
-  for (const note of Object.keys(triggerSources)) stopTriggerNote(parseInt(note));
-}
-
-function startStemsCursor(startTime) {
-  state.stemsCurrentTime = startTime;
-  state.stemsStartTime = state.stemsCtx.currentTime - startTime;
-  state.stemsPlaying = true;
+function startCursorAnim(startTime) {
+  state.cursorActive = true;
+  state.cursorTime = startTime;
+  const ctx = state.stemsMode ? state.stemsCtx : state.triggerCtx;
+  state.cursorBase = ctx.currentTime;
   if (state.waveform) state.waveform.isPlaying = true;
+
   function tick() {
-    if (state.stemsPlaying && state.stemsCtx) {
-      state.stemsCurrentTime = state.stemsCtx.currentTime - state.stemsStartTime;
-      if (state.waveform && state.stemsCurrentTime >= state.waveform.duration) {
-        state.stemsCurrentTime = state.waveform.duration;
-      }
-      updateActivePad();
+    if (!state.cursorActive) return;
+    if (Object.keys(triggerSources).length === 0) {
+      stopCursorAnim();
+      updatePlayButtons();
+      return;
     }
-    state.stemsAnimId = requestAnimationFrame(tick);
+    const c = state.stemsMode ? state.stemsCtx : state.triggerCtx;
+    if (c) {
+      state.cursorTime = startTime + (c.currentTime - state.cursorBase);
+      if (state.waveform && state.cursorTime >= state.waveform.duration) {
+        state.cursorTime = state.waveform.duration;
+      }
+    }
+    updateActivePad();
+    autoScrollWaveform();
+    renderAllWaveforms();
+    state.cursorAnimId = requestAnimationFrame(tick);
   }
-  if (state.stemsAnimId) cancelAnimationFrame(state.stemsAnimId);
-  state.stemsAnimId = requestAnimationFrame(tick);
+  if (state.cursorAnimId) cancelAnimationFrame(state.cursorAnimId);
+  state.cursorAnimId = requestAnimationFrame(tick);
 }
 
-function stopStemsCursor() {
-  state.stemsPlaying = false;
+function stopCursorAnim() {
+  state.cursorActive = false;
   if (state.waveform) state.waveform.isPlaying = false;
-  if (state.stemsAnimId) { cancelAnimationFrame(state.stemsAnimId); state.stemsAnimId = null; }
+  if (state.cursorAnimId) { cancelAnimationFrame(state.cursorAnimId); state.cursorAnimId = null; }
 }
 
 document.addEventListener('keydown', async (e) => {
@@ -159,15 +169,15 @@ document.addEventListener('keydown', async (e) => {
   if (activeTriggerNotes.has(note)) return;
   e.preventDefault();
   activeTriggerNotes.add(note);
-  const start = getNoteStart(note);
-  if (start === null || start === undefined) return;
+
+  const region = getNoteRegion(note);
+  if (!region) return;
+  const { start, end } = region;
   seekTo(start);
   setActivePadForNote(note);
 
   if (state.stemsMode && state.stemsCtx) {
     if (state.stemsCtx.state === 'suspended') await state.stemsCtx.resume();
-    startStemsCursor(start);
-    updatePlayButtons();
     const sources = [];
     state.stemsBuffers.forEach((buffer, i) => {
       if (state.stemsMuted[i]) return;
@@ -175,13 +185,27 @@ document.addEventListener('keydown', async (e) => {
       s.buffer = buffer;
       s.playbackRate.value = syncRatio;
       s.connect(state.stemsGains[i]);
+      s.onended = () => {
+        const i = sources.indexOf(s);
+        if (i !== -1) sources.splice(i, 1);
+        if (sources.length === 0) delete triggerSources[note];
+      };
       sources.push(s);
-      s.start(0, start);
+      s.start(0, start, end - start);
     });
     triggerSources[note] = sources;
-  } else if (!state.stemsMode) {
-    if (audioPlayer.paused) audioPlayer.play().catch(() => {});
+  } else if (state.audioBuffer) {
+    if (state.triggerCtx.state === 'suspended') await state.triggerCtx.resume();
+    const source = state.triggerCtx.createBufferSource();
+    source.buffer = state.audioBuffer;
+    source.connect(state.triggerCtx.destination);
+    source.onended = () => { delete triggerSources[note]; };
+    source.start(0, start, end - start);
+    triggerSources[note] = source;
   }
+
+  startCursorAnim(start);
+  updatePlayButtons();
 });
 
 document.addEventListener('keyup', (e) => {
@@ -192,11 +216,12 @@ document.addEventListener('keyup', (e) => {
   activeTriggerNotes.delete(note);
   stopTriggerNote(note);
 
-  if (state.stemsMode && activeTriggerNotes.size === 0) {
-    stopStemsCursor();
+  if (activeTriggerNotes.size === 0) {
+    if (state.stemsMode) {
+      state.stemsCurrentTime = state.cursorTime;
+    }
+    stopCursorAnim();
     updatePlayButtons();
-  } else if (!state.stemsMode && activeTriggerNotes.size === 0) {
-    audioPlayer.pause();
   }
 });
 

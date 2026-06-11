@@ -20,8 +20,13 @@ export const state = {
   stemsStartTime: 0,
   stemsAnimId: null,
   triggerCtx: null,
+  cursorActive: false,
+  cursorTime: 0,
+  cursorBase: 0,
+  cursorAnimId: null,
 };
 
 export function getCurrentTime() {
+  if (state.cursorActive) return state.cursorTime;
   return state.stemsMode ? state.stemsCurrentTime : audioPlayer.currentTime;
 }
