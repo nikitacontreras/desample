@@ -2,10 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Stem, SeratoStemsFile, STEM_MAPPING } from './types.js';
 
-const SRTS_MAGIC = new Uint8Array([0x73, 0x72, 0x74, 0x73]); // "srts"
-const HEAD_TAG = new Uint8Array([0x68, 0x65, 0x61, 0x64]); // "head"
-const STEM_TAG = new Uint8Array([0x73, 0x74, 0x65, 0x6d]); // "stem"
-
 function readUint32BE(data: Uint8Array, offset: number): number {
   return (
     (data[offset] << 24) |
@@ -17,14 +13,6 @@ function readUint32BE(data: Uint8Array, offset: number): number {
 
 function readUint16BE(data: Uint8Array, offset: number): number {
   return ((data[offset] << 8) | data[offset + 1]) >>> 0;
-}
-
-function tagEquals(data: Uint8Array, offset: number, tag: Uint8Array): boolean {
-  if (offset + 4 > data.length) return false;
-  for (let i = 0; i < 4; i++) {
-    if (data[offset + i] !== tag[i]) return false;
-  }
-  return true;
 }
 
 function decodeTag(data: Uint8Array, offset: number): string {
