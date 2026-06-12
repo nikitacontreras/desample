@@ -3,8 +3,10 @@ import { setupDropZone } from './dom.js';
 import { handleAudio, handleStems, handleJson, setStemMute, togglePlay, sync, seekTo, startPlaybackAnim, updatePlayButtons, autoScrollWaveform, syncRatio } from './player.js';
 import { renderPadGrid, updateActivePad, renderSlicePalettePads, renderRegionPads } from './pads.js';
 import { renderAllWaveforms } from './waveform.js';
-import { KEY_TO_NOTE } from './utils/constants.js';
+import { KEY_TO_NOTE, PADS_PER_BANK } from './utils/constants.js';
 import { startFps } from './fps.js';
+import { buildChain, stopChain, mixStemsBuffer } from './trigger.js';
+import { renderInspector } from './inspector.js';
 startFps();
 
 // ── Drop zones ──
@@ -39,13 +41,7 @@ audioPlayer.addEventListener('timeupdate', autoScrollWaveform);
 $('pad-grid').addEventListener('click', (e) => {
   const sliceTarget = e.target.closest('[data-slice="1"]');
   if (sliceTarget) {
-    const globalIdx = parseInt(sliceTarget.dataset.global);
-    const p = state.pads[globalIdx];
-    if (p?.slice && (state.audioUrl || state.stemsMode)) {
-      seekTo(p.slice.StartPosition);
-      if (audioPlayer.paused && !state.stemsMode) audioPlayer.play().catch(() => {});
-      else if (state.stemsMode && !state.stemsPlaying) togglePlay();
-    }
+    playSlice(parseInt(sliceTarget.dataset.global));
     return;
   }
   const regionTarget = e.target.closest('[data-region]');
@@ -87,7 +83,7 @@ function getNoteRegion(note) {
     if (regionIdx >= state.pads.length) return null;
     const p = state.pads[regionIdx];
     if (!p?.slice) return null;
-    return { start: p.slice.StartPosition, end: p.slice.EndPosition };
+    return { start: p.slice.StartPosition, end: getPadEndTime(regionIdx) };
   }
   if (state.regions.length > 0) {
     if (regionIdx >= state.regions.length) return null;
@@ -102,33 +98,98 @@ function setActivePadForNote(note) {
   if (state.pads) {
     if (regionIdx >= state.pads.length) return;
     if (!state.pads[regionIdx]?.slice) return;
-    const bank = Math.floor(regionIdx / 16);
+    const bank = Math.floor(regionIdx / PADS_PER_BANK);
     if (bank !== state.currentBank) {
       state.currentBank = bank;
       renderPadGrid();
     }
-    const bankIdx = regionIdx - bank * 16;
+    const bankIdx = regionIdx - bank * PADS_PER_BANK;
     state.activePadIdx = bankIdx;
     state.activePad = state.pads[regionIdx].slice;
     renderSlicePalettePads();
+    renderInspector(regionIdx);
   } else if (state.regions.length > 0) {
     if (regionIdx >= state.regions.length) return;
     state.activeRegionIdx = regionIdx;
     renderRegionPads();
+    renderInspector(null);
   }
 }
 
+function getPadEndTime(globalIdx) {
+  const p = state.pads?.[globalIdx];
+  if (!p?.slice) return 0;
+  const sl = p.slice;
+  if (sl.EndPosition !== sl.StartPosition && sl.EndPosition > sl.StartPosition) {
+    return sl.EndPosition;
+  }
+  const starts = state.pads
+    .map((pad, i) => ({ idx: i, start: pad.slice?.StartPosition }))
+    .filter(x => x.start != null && x.start > sl.StartPosition)
+    .sort((a, b) => a.start - b.start);
+  if (starts.length > 0) return starts[0].start;
+  return state.waveform?.duration ?? sl.StartPosition + 1;
+}
+
 function stopTriggerNote(note) {
-  const sources = triggerSources[note];
-  if (!sources) return;
-  const arr = Array.isArray(sources) ? sources : [sources];
-  arr.forEach(s => { try { s.stop(); } catch (_) {} });
+  const entry = triggerSources[note];
+  if (!entry) return;
+  if (Array.isArray(entry)) {
+    entry.forEach(s => { try { s.stop(); } catch (_) {} });
+  } else {
+    const ctx = state.stemsMode ? state.stemsCtx : state.triggerCtx;
+    if (ctx) stopChain(entry, ctx);
+  }
   delete triggerSources[note];
 }
 
-function startCursorAnim(startTime) {
+async function playSlice(globalIdx) {
+  if (globalIdx < 0 || !state.pads?.[globalIdx]?.slice) return;
+  const sl = state.pads[globalIdx].slice;
+  const start = sl.StartPosition;
+  const end = getPadEndTime(globalIdx);
+  if (start === undefined || end === undefined || end <= start) return;
+  const note = 60 + globalIdx;
+
+  seekTo(start);
+  stopTriggerNote(note);
+
+  try {
+    if (state.stemsMode && state.stemsCtx) {
+      if (state.stemsCtx.state === 'suspended') await state.stemsCtx.resume();
+      const mix = mixStemsBuffer(start, end, state.stemsCtx, state.stemsBuffers, state.stemsMuted);
+      if (mix) {
+        const chain = buildChain(note, start, end, state.stemsCtx, mix);
+        if (chain) {
+          chain.source.onended = () => { delete triggerSources[note]; };
+          triggerSources[note] = chain;
+        }
+      }
+    } else if (state.audioBuffer) {
+      if (!state.triggerCtx || state.triggerCtx.state === 'closed') {
+        state.triggerCtx = new AudioContext();
+      }
+      if (state.triggerCtx.state === 'suspended') await state.triggerCtx.resume();
+      const chain = buildChain(note, start, end, state.triggerCtx);
+      if (chain) {
+        chain.source.onended = () => { delete triggerSources[note]; };
+        triggerSources[note] = chain;
+      }
+    }
+  } catch (e) {
+    console.error('buildChain error:', e);
+    delete triggerSources[note];
+  }
+
+  setActivePadForNote(note);
+  startCursorAnim({ start, end, rev: sl.Reverse });
+  updatePlayButtons();
+}
+
+function startCursorAnim(opts) {
+  const { start = 0, end = state.waveform?.duration ?? 0, rev = false } = opts || {};
   state.cursorActive = true;
-  state.cursorTime = startTime;
+  state.cursorTime = rev ? end : start;
   const ctx = state.stemsMode ? state.stemsCtx : state.triggerCtx;
   state.cursorBase = ctx.currentTime;
   if (state.waveform) state.waveform.isPlaying = true;
@@ -142,7 +203,12 @@ function startCursorAnim(startTime) {
     }
     const c = state.stemsMode ? state.stemsCtx : state.triggerCtx;
     if (c) {
-      state.cursorTime = startTime + (c.currentTime - state.cursorBase);
+      const elapsed = c.currentTime - state.cursorBase;
+      if (rev) {
+        state.cursorTime = Math.max(start, end - elapsed);
+      } else {
+        state.cursorTime = start + elapsed;
+      }
       if (state.waveform && state.cursorTime >= state.waveform.duration) {
         state.cursorTime = state.waveform.duration;
       }
@@ -170,41 +236,46 @@ document.addEventListener('keydown', async (e) => {
   e.preventDefault();
   activeTriggerNotes.add(note);
 
-  const region = getNoteRegion(note);
+  const regionIdx = note - 60;
+  if (state.pads?.[regionIdx]?.slice) {
+    playSlice(regionIdx);
+    return;
+  }
+
+  const region = state.regions[regionIdx];
   if (!region) return;
-  const { start, end } = region;
+  const [start, end] = region;
   seekTo(start);
   setActivePadForNote(note);
 
-  if (state.stemsMode && state.stemsCtx) {
-    if (state.stemsCtx.state === 'suspended') await state.stemsCtx.resume();
-    const sources = [];
-    state.stemsBuffers.forEach((buffer, i) => {
-      if (state.stemsMuted[i]) return;
-      const s = state.stemsCtx.createBufferSource();
-      s.buffer = buffer;
-      s.playbackRate.value = syncRatio;
-      s.connect(state.stemsGains[i]);
-      s.onended = () => {
-        const i = sources.indexOf(s);
-        if (i !== -1) sources.splice(i, 1);
-        if (sources.length === 0) delete triggerSources[note];
-      };
-      sources.push(s);
-      s.start(0, start, end - start);
-    });
-    triggerSources[note] = sources;
-  } else if (state.audioBuffer) {
-    if (state.triggerCtx.state === 'suspended') await state.triggerCtx.resume();
-    const source = state.triggerCtx.createBufferSource();
-    source.buffer = state.audioBuffer;
-    source.connect(state.triggerCtx.destination);
-    source.onended = () => { delete triggerSources[note]; };
-    source.start(0, start, end - start);
-    triggerSources[note] = source;
+  try {
+    if (state.stemsMode && state.stemsCtx) {
+      if (state.stemsCtx.state === 'suspended') await state.stemsCtx.resume();
+      const mix = mixStemsBuffer(start, end, state.stemsCtx, state.stemsBuffers, state.stemsMuted);
+      if (mix) {
+        const chain = buildChain(note, start, end, state.stemsCtx, mix);
+        if (chain) {
+          chain.source.onended = () => { delete triggerSources[note]; };
+          triggerSources[note] = chain;
+        }
+      }
+    } else if (state.audioBuffer) {
+      if (!state.triggerCtx || state.triggerCtx.state === 'closed') {
+        state.triggerCtx = new AudioContext();
+      }
+      if (state.triggerCtx.state === 'suspended') await state.triggerCtx.resume();
+      const chain = buildChain(note, start, end, state.triggerCtx);
+      if (chain) {
+        chain.source.onended = () => { delete triggerSources[note]; };
+        triggerSources[note] = chain;
+      }
+    }
+  } catch (e) {
+    console.error('buildChain region error:', e);
+    delete triggerSources[note];
   }
 
-  startCursorAnim(start);
+  startCursorAnim({ start, end, rev: false });
   updatePlayButtons();
 });
 
@@ -217,9 +288,6 @@ document.addEventListener('keyup', (e) => {
   stopTriggerNote(note);
 
   if (activeTriggerNotes.size === 0) {
-    if (state.stemsMode) {
-      state.stemsCurrentTime = state.cursorTime;
-    }
     stopCursorAnim();
     updatePlayButtons();
   }

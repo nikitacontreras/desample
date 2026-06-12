@@ -1,5 +1,29 @@
 import { state, $, getCurrentTime } from './state.js';
-import { BANK_NAMES, KEY_TO_NOTE, NOTE_TO_KEY } from './utils/constants.js';
+import { BANK_NAMES, KEY_TO_NOTE, NOTE_TO_KEY, PADS_PER_BANK } from './utils/constants.js';
+import { renderInspector } from './inspector.js';
+
+function hexToRgba(hex, alpha) {
+  if (!hex) return null;
+  let h = hex.replace('#', '');
+  if (h.length === 8) {
+    alpha = alpha ?? parseInt(h.slice(6, 8), 16) / 255;
+    h = h.slice(0, 6);
+  }
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha ?? 1})`;
+}
+
+function fmtParam(label, val) {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'boolean') return ` ${label}:${val ? '✓' : '✗'}`;
+  if (typeof val === 'number') {
+    if (val === 0) return '';
+    return ` ${label}:${val.toFixed(2)}`;
+  }
+  return ` ${label}:${val}`;
+}
 
 const NOTE_NAMES = {
   60: 'C4', 61: 'C#4', 62: 'D4', 63: 'D#4', 64: 'E4',
@@ -25,7 +49,7 @@ export function renderPadGrid() {
 export function renderSlicePalettePads() {
   $('pads-section').classList.remove('hidden');
   const pads = state.pads;
-  const totalBanks = Math.ceil(pads.length / 16);
+  const totalBanks = Math.ceil(pads.length / PADS_PER_BANK);
   let tabsHtml = '';
   for (let b = 0; b < totalBanks; b++) {
     const name = BANK_NAMES[b] || `bank_${b}`;
@@ -34,22 +58,31 @@ export function renderSlicePalettePads() {
   }
   $('bank-tabs').innerHTML = tabsHtml + `<button id="key-ref-btn" class="ml-auto text-[11px] px-1.5 py-1 rounded-md bg-neutral-800/60 text-neutral-500 hover:text-neutral-300 hover:bg-neutral-700/50 transition-colors cursor-pointer" title="Keyboard Reference">⌨</button>`;
 
-  const start = state.currentBank * 16;
-  const bankPads = pads.slice(start, start + 16);
+  const start = state.currentBank * PADS_PER_BANK;
+  const bankPads = pads.slice(start, start + PADS_PER_BANK);
   $('pad-grid').innerHTML = bankPads.map((p, i) => {
     const sl = p.slice;
     const globalIdx = start + i;
-    const isActive = state.activePadIdx === i && state.currentBank === Math.floor(globalIdx / 16);
+    const isActive = state.activePadIdx === i && state.currentBank === Math.floor(globalIdx / PADS_PER_BANK);
     const note = 60 + globalIdx;
     const keyChar = NOTE_TO_KEY[note];
     const noteName = NOTE_NAMES[note];
-    let style = '', label = '', detail = '';
+    let style = '', label = '', detail = '', title = '';
     if (sl) {
-      const baseColor = sl.Color || '#065f46';
+      const baseColor = hexToRgba(sl.Color) || 'rgba(6,95,70,0.8)';
       style = `background:${baseColor};border-color:transparent;${isActive ? 'box-shadow:0 0 0 2px #22c55e;' : ''}`;
       label = sl.Name || `S${i}`; detail = `${sl.StartPosition.toFixed(1)}s`;
-    } else { style = 'background:#262626;border-color:#404040;'; }
-    const title = sl ? `${label} · ${sl.StartPosition.toFixed(3)}s – ${sl.EndPosition.toFixed(3)}s` : `Pad ${i} (vacío)`;
+      const params = [
+        fmtParam('Rev', sl.Reverse),
+        fmtParam('Lv', sl.Level),
+        fmtParam('Atk', sl.Attack),
+        fmtParam('Rel', sl.Release),
+        fmtParam('Spd', sl.PlaybackSpeed),
+        fmtParam('Key', sl.KeySemitoneOffset),
+        fmtParam('Flt', sl.FilterFrequency),
+      ].join('');
+      title = `${label} · ${sl.StartPosition.toFixed(3)}s–${sl.EndPosition.toFixed(3)}s${params}`;
+    } else { style = 'background:#262626;border-color:#404040;'; title = `Pad ${i} (vacío)`; }
     return `<div class="h-8 flex items-center gap-1 px-1.5 rounded-md border transition-all cursor-pointer ${isActive ? 'brightness-110 ring-1 ring-emerald-500' : 'hover:brightness-110'}" data-bank="${state.currentBank}" data-idx="${i}" data-global="${globalIdx}" data-note="${note}" data-slice="${sl ? 1 : 0}" title="${title}" style="${style}">${sl ? `<span class="text-[9px] font-bold text-neutral-100 leading-tight truncate">${label}</span>` : `<span class="text-[9px] text-neutral-600 font-medium">${i + 1}</span>`}<span class="text-[7px] text-neutral-400/50 ml-auto shrink-0">${keyChar ? `<span class="uppercase">${keyChar}</span>·${noteName}` : ''}</span></div>`;
   }).join('');
   bindKeyRefBtn();
@@ -136,8 +169,8 @@ export function updateActivePad() {
   const t = getCurrentTime();
   if (!state.waveform || (!state.audioUrl && !state.stemsMode)) return;
   if (state.pads) {
-    const start = state.currentBank * 16;
-    const bankPads = state.pads.slice(start, start + 16);
+    const start = state.currentBank * PADS_PER_BANK;
+    const bankPads = state.pads.slice(start, start + PADS_PER_BANK);
     let found = null, foundPad = null;
     for (let i = 0; i < bankPads.length; i++) {
       const s = bankPads[i]?.slice;
@@ -147,6 +180,7 @@ export function updateActivePad() {
       state.activePadIdx = found;
       state.activePad = foundPad;
       renderSlicePalettePads();
+      renderInspector(found !== null ? start + found : null);
     }
   } else if (state.regions.length > 0) {
     let found = null;

@@ -1,10 +1,11 @@
 import { state, $, audioPlayer, getCurrentTime } from './state.js';
 import { showError, showLoading, hideLoading } from './dom.js';
-import { parseStemsFile, extractProjectJson, parseSampleRegions } from './utils/binary.js';
+import { parseStemsFile, extractProjectJson, extractFullJson, parseSampleRegions } from './utils/binary.js';
 import { fmt } from './utils/format.js';
 import { analyzeAudio, renderAllWaveforms } from './waveform.js';
-import { refreshPadsMessage, renderPadGrid, updateActivePad } from './pads.js';
+import { refreshPadsMessage, renderPadGrid, renderSlicePalettePads, updateActivePad } from './pads.js';
 import { renderProject, updateTrackInfo } from './project.js';
+import { renderInspector } from './inspector.js';
 
 let syncRatio = 1;
 
@@ -285,7 +286,9 @@ export function handleJson(f) {
       const o = JSON.parse(r.result), k = Object.keys(o);
       if (k.length === 1 && /^Unknown\s+Event/.test(k[0])) {
         const b = o[k[0]];
-        state.projectData = extractProjectJson(new Uint8Array(Object.keys(b).map(k => b[k])));
+        const full = extractFullJson(new Uint8Array(Object.keys(b).map(k => b[k])));
+        state.projectData = full?.project || full;
+        if (full?.slicePalette) state.projectData.slicePalette = full.slicePalette;
       } else if (k.length === 1 && k[0] === 'project') state.projectData = o.project;
       else if (o && typeof o === 'object' && 'Version' in o) state.projectData = o;
       else state.projectData = o;
@@ -294,13 +297,61 @@ export function handleJson(f) {
       if (state.projectData) {
         const ss = state.projectData.sourceSong;
         if (ss?.SampleRegions) state.regions = parseSampleRegions(ss.SampleRegions);
-        if (state.projectData.slicePalette?.slicePad) state.pads = state.projectData.slicePalette.slicePad;
+        if (state.projectData.slicePalette?.slicePad) {
+          state.pads = state.projectData.slicePalette.slicePad.map(p => ({
+            ...p,
+            slice: p.slice || {
+              StartPosition: 0,
+              EndPosition: 0,
+              Name: '',
+              Color: null,
+              Reverse: false,
+              Level: 1,
+              Attack: 0,
+              Decay: 0,
+              Sustain: 1,
+              Release: 0,
+              PlaybackSpeed: 1,
+              KeySemitoneOffset: 0,
+              FilterFrequency: 20000,
+            }
+          }));
+        }
+        if (!state.pads && state.regions.length > 0) {
+          state.pads = state.regions.map(([start, end]) => ({
+            slice: {
+              StartPosition: start,
+              EndPosition: end,
+              Name: '',
+              Color: null,
+              Reverse: false,
+              Level: 1,
+              Attack: 0,
+              Decay: 0,
+              Sustain: 1,
+              Release: 0,
+              PlaybackSpeed: 1,
+              KeySemitoneOffset: 0,
+              FilterFrequency: 20000,
+            }
+          }));
+        }
       }
       renderProject();
       hideLoading();
       updateTrackInfo();
+      const selIdx = state.pads?.findIndex(p => p.slice?.StartPosition > 0 || p.slice?.StartPosition === 0) ?? -1;
+      if (selIdx >= 0) {
+        state.activePadIdx = selIdx % 32;
+        state.currentBank = Math.floor(selIdx / 32);
+        state.activePad = state.pads[selIdx].slice;
+      } else {
+        state.activePadIdx = null;
+        state.activePad = null;
+      }
       renderPadGrid();
       renderAllWaveforms();
+      renderInspector(selIdx >= 0 ? selIdx : null);
       refreshPadsMessage();
     } catch (e) { state.projectData = null; state.regions = []; state.pads = null; hideLoading(); showError('Error JSON: ' + e.message); }
   };

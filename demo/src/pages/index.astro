@@ -108,6 +108,22 @@ const version = pkg.version;
           <div id="stem-icons" class="flex items-center gap-2"></div>
         </div>
 
+        <div id="inspector-top" class="hidden h-10 bg-neutral-800/20 border-b border-neutral-700/30 flex items-center gap-2 px-3 shrink-0 text-[10px]">
+          <input id="inspector-name" type="text" class="w-20 bg-neutral-800 border border-neutral-700 rounded px-1.5 py-0.5 text-neutral-200 text-[10px] outline-none focus:border-emerald-600" placeholder="Name">
+          <input id="inspector-color" type="color" class="w-5 h-5 rounded cursor-pointer border-0 p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border-0">
+          <button id="inspector-reverse" class="px-1.5 py-0.5 rounded font-medium transition-colors cursor-pointer text-neutral-500 bg-neutral-800 hover:text-neutral-300">Rev ✗</button>
+          <div class="flex items-center gap-1">
+            <span class="text-neutral-500 w-4">Lv</span>
+            <input id="inspector-level" type="range" min="0" max="2" step="0.01" value="1"
+              class="w-20 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5
+                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer
+                [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full
+                [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0">
+            <span id="inspector-level-val" class="text-neutral-400 font-mono w-7 text-right">1.00</span>
+          </div>
+        </div>
+
         <div id="overview-container" class="h-9 bg-neutral-800/20 border-b border-neutral-700/40 shrink-0 relative">
           <canvas id="overview-canvas" class="absolute inset-0 w-full h-full cursor-pointer"></canvas>
           <div id="overview-empty" class="absolute inset-0 hidden items-center justify-center text-neutral-600 text-[10px]">Suelta un archivo de audio</div>
@@ -119,6 +135,20 @@ const version = pkg.version;
           <div id="error-toast" class="hidden absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-red-900/85 border border-red-700/60 text-red-200 px-3 py-1.5 rounded-md text-xs whitespace-nowrap"></div>
           <div id="loading-overlay" class="hidden absolute inset-0 z-10 bg-neutral-900/70 flex items-center justify-center">
             <svg class="animate-spin h-6 w-6 text-neutral-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+          </div>
+        </div>
+
+        <div id="inspector-bottom" class="hidden bg-neutral-800/20 border-t border-neutral-700/30 flex flex-col px-3 py-1.5 shrink-0 text-[10px]">
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1"><span class="text-neutral-500 w-5">Atk</span><input id="inspector-attack" type="range" min="0" max="5" step="0.01" value="0" class="w-20 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0"><span id="inspector-attack-val" class="text-neutral-400 font-mono w-9 text-right">0.00s</span></div>
+            <div class="flex items-center gap-1"><span class="text-neutral-500 w-5">Dcy</span><input id="inspector-decay" type="range" min="0" max="5" step="0.01" value="0" class="w-20 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0"><span id="inspector-decay-val" class="text-neutral-400 font-mono w-9 text-right">0.00s</span></div>
+            <div class="flex items-center gap-1"><span class="text-neutral-500 w-5">Sus</span><input id="inspector-sustain" type="range" min="0" max="1" step="0.01" value="1" class="w-16 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0"><span id="inspector-sustain-val" class="text-neutral-400 font-mono w-7 text-right">1.00</span></div>
+            <div class="flex items-center gap-1"><span class="text-neutral-500 w-5">Rel</span><input id="inspector-release" type="range" min="0" max="5" step="0.01" value="0" class="w-20 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0"><span id="inspector-release-val" class="text-neutral-400 font-mono w-9 text-right">0.00s</span></div>
+          </div>
+          <div class="flex items-center gap-3 mt-1">
+            <div class="flex items-center gap-1"><span class="text-neutral-500 w-5">Spd</span><input id="inspector-speed" type="range" min="0.1" max="2" step="0.01" value="1" class="w-20 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0"><span id="inspector-speed-val" class="text-neutral-400 font-mono w-9 text-right">1.00x</span></div>
+            <div class="flex items-center gap-1"><span class="text-neutral-500 w-5">Key</span><input id="inspector-key" type="range" min="-12" max="12" step="1" value="0" class="w-16 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0"><span id="inspector-key-val" class="text-neutral-400 font-mono w-9 text-right">+0st</span></div>
+            <div class="flex items-center gap-1"><span class="text-neutral-500 w-5">Flt</span><input id="inspector-filter" type="range" min="20" max="20000" step="1" value="20000" class="w-20 h-1 appearance-none rounded-full bg-neutral-800 outline-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-emerald-500 [&::-moz-range-thumb]:border-0"><span id="inspector-filter-val" class="text-neutral-400 font-mono w-10 text-right">20.0k</span></div>
           </div>
         </div>
 

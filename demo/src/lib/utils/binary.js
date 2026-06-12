@@ -34,6 +34,25 @@ export function extractProjectJson(d) {
   } catch { return null }
 }
 
+export function extractFullJson(d) {
+  const pi = findBytes(d, PJPREFIX); if (pi < 0) return null;
+  const bs = pi + 2; if (bs >= d.length || d[bs] !== BO) return null;
+  let dp = 0, is = false, es = false, end = -1;
+  for (let i = bs; i < d.length; i++) {
+    const b = d[i];
+    if (es) { es = false; continue }
+    if (b === BS) { es = true; continue }
+    if (b === Q) { is = !is; continue }
+    if (is) continue;
+    if (b === BO) dp++;
+    else if (b === BC) { dp--; if (dp === 0) { end = i + 1; break } }
+  }
+  if (end < 0) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(d.slice(bs, end)));
+  } catch { return null }
+}
+
 export function parseSampleRegions(s) { return s ? s.split(',').map(p => p.split('|').map(Number)) : []; }
 
 export function parseStemsFile(bytes) {
