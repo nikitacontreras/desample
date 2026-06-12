@@ -151,7 +151,6 @@ async function playSlice(globalIdx) {
   if (start === undefined || end === undefined || end <= start) return;
   const note = 60 + globalIdx;
 
-  seekTo(start);
   stopTriggerNote(note);
 
   try {
@@ -245,7 +244,6 @@ document.addEventListener('keydown', async (e) => {
   const region = state.regions[regionIdx];
   if (!region) return;
   const [start, end] = region;
-  seekTo(start);
   setActivePadForNote(note);
 
   try {

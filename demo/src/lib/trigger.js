@@ -36,8 +36,10 @@ export function buildChain(note, start, end, ctx, sourceBuffer) {
   const keyOffset = sl?.KeySemitoneOffset ?? 0;
   const filterFreq = sl?.FilterFrequency ?? null;
   const rate = syncRatio * playbackSpeed * Math.pow(2, keyOffset / 12);
-  const dur = (end - start) / rate;
+  const bufDur = end - start;
+  const wallDur = bufDur / rate;
   const now = ctx.currentTime;
+  console.log({ globalIdx, start, end, bufDur, rate, wallDur, syncRatio, rev: sl?.Reverse, level });
 
   const buffer = sourceBuffer || state.audioBuffer;
   if (!buffer) return null;
@@ -62,11 +64,11 @@ export function buildChain(note, start, end, ctx, sourceBuffer) {
       source.buffer = getReversedBuffer(ctx, buffer, start, end);
     }
     source.playbackRate.value = rate;
-    source.start(0, 0, dur);
+    source.start(0, 0, bufDur);
   } else {
     source.buffer = buffer;
     source.playbackRate.value = rate;
-    source.start(0, isShortBuffer ? 0 : start, dur);
+    source.start(0, isShortBuffer ? 0 : start, bufDur);
   }
 
   source.connect(gainNode);
@@ -88,9 +90,9 @@ export function buildChain(note, start, end, ctx, sourceBuffer) {
   }
 
   if (release > 0) {
-    const relTime = now + dur - Math.min(release, dur);
+    const relTime = now + wallDur - Math.min(release, wallDur);
     gainNode.gain.setValueAtTime(sustainLevel, relTime);
-    gainNode.gain.linearRampToValueAtTime(0, now + dur);
+    gainNode.gain.linearRampToValueAtTime(0, now + wallDur);
   }
 
   return { source, gainNode, release, rate, level, sustainLevel };
